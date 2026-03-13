@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+      - admin
+    networks:
+      - hoabot
+
+  frontend:
+    build: ./frontend
+    expose:
+      - "3000"
+    environment:
+      - VITE_API_URL=http://localhost/api
+    networks:
+      - hoabot
+
+  backend:
+    build: ./backend
+    expose:
+      - "8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/hoabot
+      - REDIS_URL=redis://redis:6379
+      - CHROMA_URL=http://chromadb:8001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}
+      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD}
+      - APP_URL=${APP_URL}
+    depends_on:
+      - postgres
+      - redis
+      - chromadb
+    volumes:
+      - ./documents:/app/documents
+    networks:
+      - hoabot
+
+  admin:
+    build: ./admin
+    expose:
+      - "3001"
+    environment:
+      - VITE_API_URL=http://localhost/api
+    networks:
+      - hoabot
+
+  chromadb:
+    image: chromadb/chroma:latest
+    expose:
+      - "8001"
+    environment:
+      - CHROMA_SERVER_HTTP_PORT=8001
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - hoabot
+
+  postgres:
+    image: postgres:15-alpine
+    expose:
+      - "5432"
+    environment:
+      - POSTGRES_DB=hoabot
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hoabot
+
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hoabot
+
+volumes:
+  chroma_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  hoabot:
+    driver: bridge
