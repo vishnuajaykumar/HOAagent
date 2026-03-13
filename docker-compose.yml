@@ -64,7 +64,7 @@ services:
     restart: unless-stopped
 
   chromadb:
-    image: chromadb/chroma:0.4.22
+    image: chromadb/chroma:0.5.23
     expose:
       - "8001"
     environment:

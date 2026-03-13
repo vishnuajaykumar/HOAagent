@@ -1,7 +1,6 @@
 import asyncio
 import pypdf
 import chromadb
-from chromadb.config import Settings as ChromaSettings
 from sentence_transformers import SentenceTransformer
 from config import settings
 
@@ -18,8 +17,7 @@ def _get_chroma() -> chromadb.HttpClient:
         port = int(settings.chroma_url.split(":")[-1])
         _chroma_client = chromadb.HttpClient(
             host=host,
-            port=port,
-            settings=ChromaSettings(anonymized_telemetry=False)
+            port=port
         )
     return _chroma_client
 

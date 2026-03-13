@@ -5,7 +5,7 @@ asyncpg==0.29.0
 alembic==1.13.1
 psycopg2-binary==2.9.9
 redis==5.0.1
-chromadb==0.4.22
+chromadb==0.5.23
 anthropic==0.40.0
 pypdf==3.17.4
 sentence-transformers==2.3.1
