@@ -4,7 +4,7 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -33,7 +33,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/hoabot
       - REDIS_URL=redis://redis:6379
-      - CHROMA_URL=http://chromadb:8001
+      - CHROMA_URL=http://chromadb:8000
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - JWT_SECRET=${JWT_SECRET}
       - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}
@@ -66,16 +66,14 @@ services:
   chromadb:
     image: chromadb/chroma:0.5.23
     expose:
-      - "8001"
-    environment:
-      - CHROMA_SERVER_HTTP_PORT=8001
+      - "8000"
     volumes:
       - chroma_data:/chroma/chroma
     networks:
       - hoabot
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8001/api/v1/heartbeat || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
