@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
-import { getClients, approveClient, suspendClient, cancelClient, setLimits, getAllUsage } from '../api'
+import { getClients, approveClient, suspendClient, cancelClient, setLimits, setTier, getAllUsage } from '../api'
 
 interface Client {
   id: string
@@ -11,6 +11,7 @@ interface Client {
   api_key: string
   token_limit_monthly: number
   tokens_used_this_month: number
+  model_tier: string
   created_at: string
 }
 
@@ -51,6 +52,10 @@ export default function SuperDashboard() {
     pending: '#f59e0b', active: '#22c55e', suspended: '#ef4444', cancelled: '#94a3b8'
   }
 
+  const tierColor: Record<string, string> = {
+    haiku: '#64748b', sonnet: '#7c3aed'
+  }
+
   return (
     <Layout title="Super Admin Dashboard" role="super">
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -70,7 +75,7 @@ export default function SuperDashboard() {
         <div style={{ background: 'white', borderRadius: 12, overflow: 'auto', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['Company', 'Email', 'Status', 'Usage', 'Token Limit', 'Actions'].map(h => (
+              <tr>{['Company', 'Email', 'Status', 'Model Tier', 'Usage', 'Token Limit', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
               ))}</tr>
             </thead>
@@ -81,6 +86,17 @@ export default function SuperDashboard() {
                   <td style={td}>{c.email}</td>
                   <td style={td}>
                     <span style={{ padding: '2px 10px', borderRadius: 999, color: 'white', fontSize: 12, fontWeight: 600, background: statusColor[c.status] || '#94a3b8' }}>{c.status}</span>
+                  </td>
+                  <td style={td}>
+                    <select
+                      value={c.model_tier || 'haiku'}
+                      onChange={e => act(() => setTier(c.id, e.target.value))}
+                      style={{ padding: '4px 8px', border: '1.5px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                        color: 'white', background: tierColor[c.model_tier || 'haiku'], fontWeight: 600 }}
+                    >
+                      <option value="haiku" style={{ background: '#64748b' }}>Haiku (Basic)</option>
+                      <option value="sonnet" style={{ background: '#7c3aed' }}>Sonnet (Standard)</option>
+                    </select>
                   </td>
                   <td style={td}>{(c.tokens_used_this_month / 1000).toFixed(1)}K / {(c.token_limit_monthly / 1000).toFixed(0)}K</td>
                   <td style={td}>
@@ -118,7 +134,7 @@ export default function SuperDashboard() {
         <div style={{ background: 'white', borderRadius: 12, overflow: 'auto', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['Company', 'Status', 'Tokens Used', 'Limit', 'Usage %'].map(h => (
+              <tr>{['Company', 'Status', 'Model', 'Tokens Used', 'Limit', 'Usage %'].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
               ))}</tr>
             </thead>
@@ -127,6 +143,7 @@ export default function SuperDashboard() {
                 <tr key={u.client_id}>
                   <td style={td}>{u.company_name}</td>
                   <td style={td}><span style={{ padding: '2px 10px', borderRadius: 999, color: 'white', fontSize: 12, fontWeight: 600, background: statusColor[u.status] }}>{u.status}</span></td>
+                  <td style={td}><span style={{ padding: '2px 8px', borderRadius: 999, color: 'white', fontSize: 11, fontWeight: 600, background: tierColor[u.model_tier || 'haiku'] }}>{u.model_tier || 'haiku'}</span></td>
                   <td style={td}>{u.tokens_used_this_month?.toLocaleString()}</td>
                   <td style={td}>{u.token_limit_monthly?.toLocaleString()}</td>
                   <td style={td}>

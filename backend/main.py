@@ -3,12 +3,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import init_db
 from routers import auth, super_admin, client_admin, chat
+from routers.chat import close_clients
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
+    await close_clients()  # graceful shutdown: close Anthropic + Redis pool
 
 
 app = FastAPI(
@@ -21,7 +23,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -16,7 +16,7 @@ async function request(path: string, options: RequestInit = {}, tokenKey = 'clie
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Request failed' }))
-    throw new Error(err.detail || 'Request failed')
+    throw new Error(`${res.status}: ${err.detail || 'Request failed'}`)
   }
   return res.json()
 }
@@ -36,6 +36,8 @@ export const suspendClient = (id: string) => request(`/super/clients/${id}/suspe
 export const cancelClient = (id: string) => request(`/super/clients/${id}/cancel`, { method: 'PUT' }, 'super_token')
 export const setLimits = (id: string, limit: number) =>
   request(`/super/clients/${id}/limits`, { method: 'PUT', body: JSON.stringify({ token_limit_monthly: limit }) }, 'super_token')
+export const setTier = (id: string, tier: string) =>
+  request(`/super/clients/${id}/tier`, { method: 'PUT', body: JSON.stringify({ model_tier: tier }) }, 'super_token')
 export const getAllUsage = () => request('/super/usage', {}, 'super_token')
 
 export const getMe = () => request('/client/me')

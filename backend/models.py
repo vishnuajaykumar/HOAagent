@@ -24,6 +24,7 @@ class Client(Base):
     status = Column(SAEnum(ClientStatus), default=ClientStatus.pending)
     token_limit_monthly = Column(BigInteger, default=1_000_000)
     tokens_used_this_month = Column(BigInteger, default=0)
+    model_tier = Column(String, default="haiku")  # haiku | sonnet
     created_at = Column(DateTime, default=datetime.utcnow)
     approved_at = Column(DateTime, nullable=True)
 

@@ -8,7 +8,7 @@ from typing import Optional
 import anthropic
 import redis.asyncio as aioredis
 from database import get_db, AsyncSessionLocal
-from models import Client, ClientStatus, UsageLog
+from models import Client, ClientStatus, Community, UsageLog
 from rag.retriever import retrieve_context
 from config import settings
 
@@ -23,6 +23,39 @@ STRICT RULES:
 3. Never make up rules, fees, or policies
 4. Be friendly, clear, and concise
 5. If asked about something outside HOA topics, politely redirect"""
+
+MODEL_MAP = {"sonnet": "claude-sonnet-4-6", "haiku": "claude-haiku-4-5"}
+
+# Module-level async client and Redis pool — created once, reused across requests
+_anthropic_client: Optional[anthropic.AsyncAnthropic] = None
+_redis_pool: Optional[aioredis.ConnectionPool] = None
+
+
+def get_anthropic_client() -> anthropic.AsyncAnthropic:
+    global _anthropic_client
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return _anthropic_client
+
+
+def get_redis_pool() -> aioredis.ConnectionPool:
+    global _redis_pool
+    if _redis_pool is None:
+        _redis_pool = aioredis.ConnectionPool.from_url(
+            settings.redis_url, decode_responses=True
+        )
+    return _redis_pool
+
+
+async def close_clients():
+    """Called from lifespan shutdown to release connections cleanly."""
+    global _anthropic_client, _redis_pool
+    if _anthropic_client is not None:
+        await _anthropic_client.close()
+        _anthropic_client = None
+    if _redis_pool is not None:
+        await _redis_pool.aclose()
+        _redis_pool = None
 
 
 class ChatRequest(BaseModel):
@@ -49,27 +82,41 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             detail="Monthly token limit reached. Please contact your HOA management company."
         )
 
-    # Check Redis cache
-    redis = await aioredis.from_url(settings.redis_url, decode_responses=True)
+    # Validate community_id ownership — prevent cross-client data access
+    if request.community_id:
+        comm_result = await db.execute(
+            select(Community).where(
+                Community.id == request.community_id,
+                Community.client_id == client.id
+            )
+        )
+        if not comm_result.scalar_one_or_none():
+            raise HTTPException(status_code=403, detail="Community not found")
+
+    # Check Redis cache — use pooled connection as async context manager
     cache_key = f"chat:{client.id}:{request.community_id}:{request.question}"
-    cached = await redis.get(cache_key)
+    async with aioredis.Redis(connection_pool=get_redis_pool()) as redis:
+        cached = await redis.get(cache_key)
+
     if cached:
-        await redis.close()
-        return {"answer": cached, "cached": True}
+        async def cached_stream():
+            yield f"data: {json.dumps({'text': cached})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'cached': True})}\n\n"
+        return StreamingResponse(cached_stream(), media_type="text/event-stream")
 
     # Retrieve relevant document chunks
-    context_chunks = retrieve_context(
+    context_chunks = await retrieve_context(
         question=request.question,
         client_id=client.id,
         community_id=request.community_id
     )
 
     if not context_chunks:
-        await redis.close()
-        return {
-            "answer": "No HOA documents have been uploaded yet. Please ask your HOA management to upload the relevant documents.",
-            "cached": False
-        }
+        async def no_docs_stream():
+            msg = "No HOA documents have been uploaded yet. Please ask your HOA management to upload the relevant documents."
+            yield f"data: {json.dumps({'text': msg})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        return StreamingResponse(no_docs_stream(), media_type="text/event-stream")
 
     # Build prompt with context
     context_text = "\n\n---\n\n".join(context_chunks)
@@ -80,40 +127,42 @@ Resident Question: {request.question}"""
 
     # If no API key configured yet, return placeholder
     if not settings.anthropic_api_key:
-        await redis.close()
-        return {
-            "answer": "AI service not configured yet. API key pending setup.",
-            "cached": False
-        }
+        async def no_key_stream():
+            msg = "AI service not configured yet. API key pending setup."
+            yield f"data: {json.dumps({'text': msg})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        return StreamingResponse(no_key_stream(), media_type="text/event-stream")
 
     client_id = client.id
-    anthropic_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    model = MODEL_MAP.get(client.model_tier or "haiku", "claude-haiku-4-5")
+    ac = get_anthropic_client()
 
     async def stream_response():
         full_response = ""
         total_input = 0
         total_output = 0
 
-        with anthropic_client.messages.stream(
-            model="claude-opus-4-6",
+        # AsyncAnthropic stream — does NOT block the event loop
+        async with ac.messages.stream(
+            model=model,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}]
         ) as stream:
-            for event in stream:
+            async for event in stream:
                 if hasattr(event, "type"):
                     if event.type == "content_block_delta" and hasattr(event.delta, "text"):
                         chunk = event.delta.text
                         full_response += chunk
                         yield f"data: {json.dumps({'text': chunk})}\n\n"
 
-            final = stream.get_final_message()
+            final = await stream.get_final_message()
             total_input = final.usage.input_tokens
             total_output = final.usage.output_tokens
 
-        # Cache for 1 hour
-        await redis.setex(cache_key, 3600, full_response)
-        await redis.close()
+        # Cache the full response for 1 hour
+        async with aioredis.Redis(connection_pool=get_redis_pool()) as redis_cache:
+            await redis_cache.setex(cache_key, 3600, full_response)
 
         # Log usage
         async with AsyncSessionLocal() as session:

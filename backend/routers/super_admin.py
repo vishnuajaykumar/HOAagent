@@ -14,6 +14,10 @@ class LimitUpdate(BaseModel):
     token_limit_monthly: int
 
 
+class TierUpdate(BaseModel):
+    model_tier: str  # haiku | sonnet
+
+
 @router.get("/clients")
 async def list_clients(
     db: AsyncSession = Depends(get_db),
@@ -30,6 +34,7 @@ async def list_clients(
             "api_key": c.api_key,
             "token_limit_monthly": c.token_limit_monthly,
             "tokens_used_this_month": c.tokens_used_this_month,
+            "model_tier": c.model_tier or "haiku",
             "created_at": c.created_at,
             "approved_at": c.approved_at,
         }
@@ -99,6 +104,24 @@ async def set_limits(
     return {"message": "Limits updated"}
 
 
+@router.put("/clients/{client_id}/tier")
+async def set_tier(
+    client_id: str,
+    data: TierUpdate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_super_admin)
+):
+    if data.model_tier not in ("haiku", "sonnet"):
+        raise HTTPException(status_code=400, detail="Invalid tier. Use haiku or sonnet.")
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    client.model_tier = data.model_tier
+    await db.commit()
+    return {"message": "Tier updated"}
+
+
 @router.get("/usage")
 async def get_all_usage(
     db: AsyncSession = Depends(get_db),
@@ -110,7 +133,8 @@ async def get_all_usage(
             Client.company_name,
             Client.tokens_used_this_month,
             Client.token_limit_monthly,
-            Client.status
+            Client.status,
+            Client.model_tier
         )
     )
     rows = result.all()
@@ -121,6 +145,7 @@ async def get_all_usage(
             "tokens_used_this_month": r[2],
             "token_limit_monthly": r[3],
             "status": r[4],
+            "model_tier": r[5] or "haiku",
             "usage_percent": round((r[2] / r[3]) * 100, 1) if r[3] > 0 else 0,
         }
         for r in rows

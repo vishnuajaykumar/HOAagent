@@ -1,10 +1,11 @@
 import os
-import shutil
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Security
+import re
+import asyncio
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from database import get_db
+from database import get_db, AsyncSessionLocal
 from models import Client, Document, UsageLog
 from auth import decode_token
 from rag.ingest import ingest_pdf
@@ -27,6 +28,34 @@ async def get_current_client(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     return client
+
+
+def _safe_filename(name: str) -> str:
+    """Strip path components and remove characters that aren't alphanumeric, dot, dash, or underscore."""
+    name = os.path.basename(name)
+    name = re.sub(r"[^\w.\-]", "_", name)
+    return name or "upload"
+
+
+async def _run_ingest(doc_id: str, pdf_path: str, client_id: str, community_id: str):
+    """Background task: ingest the PDF and update document status."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(Document).where(Document.id == doc_id))
+        doc = result.scalar_one_or_none()
+        if not doc:
+            return
+        try:
+            ingest_result = await ingest_pdf(
+                pdf_path=pdf_path,
+                client_id=client_id,
+                community_id=community_id,
+                document_id=doc_id
+            )
+            doc.chroma_collection = ingest_result["collection"]
+            doc.status = "ready"
+        except Exception as e:
+            doc.status = "error"
+        await session.commit()
 
 
 @router.get("/me")
@@ -52,24 +81,29 @@ async def get_embed_code(client: Client = Depends(get_current_client)):
 
 @router.post("/documents/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     community_id: str = None,
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db)
 ):
-    if not file.filename.endswith(".pdf"):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
+    safe_name = _safe_filename(file.filename)
     os.makedirs("/app/documents", exist_ok=True)
-    file_path = f"/app/documents/{client.id}_{file.filename}"
 
-    with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    # Avoid collisions: prefix with client_id
+    file_path = f"/app/documents/{client.id}_{safe_name}"
+
+    # Async file write — read content first, then write in thread to avoid blocking
+    content = await file.read()
+    await asyncio.to_thread(_write_file, file_path, content)
 
     doc = Document(
         client_id=client.id,
         community_id=community_id,
-        filename=file.filename,
+        filename=safe_name,
         chroma_collection="pending",
         status="processing"
     )
@@ -77,25 +111,26 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    try:
-        result = await ingest_pdf(
-            pdf_path=file_path,
-            client_id=client.id,
-            community_id=community_id,
-            document_id=doc.id
-        )
-        doc.chroma_collection = result["collection"]
-        doc.status = "ready"
-        await db.commit()
-        return {
-            "message": "Document uploaded and processed",
-            "document_id": doc.id,
-            "chunks": result["chunks"]
-        }
-    except Exception as e:
-        doc.status = "error"
-        await db.commit()
-        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+    # Kick off ingestion in the background — return immediately to the client
+    background_tasks.add_task(
+        _run_ingest,
+        doc_id=str(doc.id),
+        pdf_path=file_path,
+        client_id=str(client.id),
+        community_id=str(community_id) if community_id else None
+    )
+
+    return {
+        "message": "Document uploaded and processing in background",
+        "document_id": doc.id,
+        "filename": safe_name,
+        "status": "processing"
+    }
+
+
+def _write_file(path: str, content: bytes) -> None:
+    with open(path, "wb") as f:
+        f.write(content)
 
 
 @router.get("/documents")
