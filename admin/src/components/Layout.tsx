@@ -35,6 +35,6 @@ export default function Layout({ title, role, children }: LayoutProps) {
 const s: Record<string, React.CSSProperties> = {
   nav: { background: '#1e293b', padding: '0 32px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   logo: { color: 'white', fontWeight: 700, fontSize: 18 },
-  role: { background: '#2563eb', color: 'white', fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600 },
+  role: { background: '#000000', color: 'white', fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600 },
   logoutBtn: { background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
 }

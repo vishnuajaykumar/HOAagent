@@ -6,6 +6,7 @@ from database import get_db
 from models import Client, ClientStatus
 from auth import hash_password, verify_password, create_token
 from config import settings
+from datetime import datetime
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,14 +32,15 @@ async def signup(data: SignupRequest, db: AsyncSession = Depends(get_db)):
         company_name=data.company_name,
         email=data.email,
         password_hash=hash_password(data.password),
-        status=ClientStatus.pending
+        status=ClientStatus.active,   # Management Companies auto-approved
+        approved_at=datetime.utcnow()
     )
     db.add(client)
     await db.commit()
     await db.refresh(client)
 
     return {
-        "message": "Account created. Pending approval from administrator.",
+        "message": "Account created. You can log in immediately.",
         "id": client.id
     }
 
@@ -51,8 +53,6 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     if not client or not verify_password(data.password, client.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if client.status == ClientStatus.pending:
-        raise HTTPException(status_code=403, detail="Account pending approval")
     if client.status in [ClientStatus.suspended, ClientStatus.cancelled]:
         raise HTTPException(status_code=403, detail="Account is not active")
 

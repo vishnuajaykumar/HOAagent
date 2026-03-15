@@ -42,12 +42,12 @@ export default function ClientLogin() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' },
-  card: { background: 'white', padding: 40, borderRadius: 16, width: 380, boxShadow: '0 4px 24px rgba(0,0,0,0.08)' },
-  logo: { textAlign: 'center', color: '#2563eb', marginBottom: 4 },
-  subtitle: { textAlign: 'center', color: '#1e293b', fontSize: 18, fontWeight: 500, marginBottom: 24 },
-  error: { background: '#fef2f2', color: '#ef4444', padding: 10, borderRadius: 8, marginBottom: 16, fontSize: 14 },
-  input: { width: '100%', padding: '10px 14px', marginBottom: 12, border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14, outline: 'none' },
-  btn: { width: '100%', padding: 12, background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer' },
-  linkRow: { textAlign: 'center', marginTop: 16, fontSize: 14, color: '#64748b' },
+  page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f7', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
+  card: { background: 'rgba(255, 255, 255, 0.95)', padding: 48, borderRadius: 20, width: 380, boxShadow: '0 10px 40px rgba(0,0,0,0.08)', backdropFilter: 'blur(20px)', border: '1px solid #d2d2d7' },
+  logo: { textAlign: 'center', color: '#1d1d1f', marginBottom: 4, fontWeight: 600, letterSpacing: -0.5 },
+  subtitle: { textAlign: 'center', color: '#86868b', fontSize: 16, fontWeight: 500, marginBottom: 32 },
+  error: { background: '#fffbeb', color: '#ff3b30', padding: 12, borderRadius: 12, marginBottom: 20, fontSize: 14, border: '1px solid #ff3b3020' },
+  input: { width: '100%', padding: '12px 16px', marginBottom: 16, border: '1px solid #d2d2d7', borderRadius: 12, fontSize: 15, outline: 'none', background: '#ffffff', color: '#1d1d1f', boxSizing: 'border-box' },
+  btn: { width: '100%', padding: 14, background: '#000000', color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s', marginTop: 8 },
+  linkRow: { textAlign: 'center', marginTop: 24, fontSize: 14, color: '#86868b' },
 }

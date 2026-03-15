@@ -34,6 +34,13 @@ app.include_router(client_admin.router)
 app.include_router(chat.router)
 
 
+from fastapi.responses import FileResponse
+import os
+
+@app.get("/widget.js")
+async def get_widget():
+    return FileResponse("static/widget.js", media_type="application/javascript")
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "HOAbot API"}

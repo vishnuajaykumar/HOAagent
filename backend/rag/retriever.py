@@ -28,10 +28,13 @@ def _get_embedder() -> SentenceTransformer:
     return _embedder
 
 
+import hashlib
+
 def get_collection_name(client_id: str, community_id: str = None) -> str:
-    if community_id:
-        return f"client_{client_id}_community_{community_id}"
-    return f"client_{client_id}_general"
+    """Generate a safe, short collection name (max 63 chars for Chroma)."""
+    combined = f"{client_id}_{community_id}" if community_id else f"{client_id}_general"
+    h = hashlib.md5(combined.encode()).hexdigest()
+    return f"col_{h}"
 
 
 def _query_chroma(collection_name: str, question: str, n_results: int) -> list[str]:
@@ -54,17 +57,30 @@ def _query_chroma(collection_name: str, question: str, n_results: int) -> list[s
         n_results=min(n_results, count)
     )
 
-    if not results or not results["documents"]:
+    if not results or not results.get("documents") or len(results["documents"]) == 0:
         return []
 
-    return results["documents"][0]
+    docs = results["documents"][0]
+    metas = results.get("metadatas", [[]])[0] if results.get("metadatas") else []
+    
+    formatted_chunks = []
+    for i, doc in enumerate(docs):
+        meta_info = ""
+        if metas and i < len(metas):
+            page = metas[i].get("page", "Unknown")
+            # If "page" is just a chunk index, we'll label it "Section/Chunk"
+            # so the AI can at least reference it.
+            meta_info = f"[Found in Section/Page: {page}]\n"
+        formatted_chunks.append(f"{meta_info}{doc}")
+
+    return formatted_chunks
 
 
 async def retrieve_context(
     question: str,
     client_id: str,
     community_id: str = None,
-    n_results: int = 5
+    n_results: int = 10
 ) -> list[str]:
     """
     Embed the question and find the most relevant document chunks.
